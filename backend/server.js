@@ -10,6 +10,7 @@ const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
+const JWT_EXPIRES_IN = "12h";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -70,7 +71,7 @@ app.post("/api/register", upload.single("avatar"), async (req, res) => {
       [username, hash, avatarPath]
     );
     const user = result.rows[0];
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
     res.json({ token, user });
   } catch (err) {
     console.error(err);
@@ -88,12 +89,21 @@ app.post("/api/login", async (req, res) => {
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: "Invalid credentials" });
 
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
     res.json({ token, user: { id: user.id, username: user.username, avatar: user.avatar } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
+});
+
+// --- Refresh: exchange a still-valid token for a new one with a renewed 12h expiry ---
+app.post("/api/refresh", authRequired, async (req, res) => {
+  const result = await pool.query("SELECT id, username, avatar FROM users WHERE id = $1", [req.user.id]);
+  const user = result.rows[0];
+  if (!user) return res.status(404).json({ error: "User not found" });
+  const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  res.json({ token, user });
 });
 
 // --- Users list ---
