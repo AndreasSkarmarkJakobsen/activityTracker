@@ -1,7 +1,6 @@
 const API = "/api";
 let token = localStorage.getItem("token");
 let currentUser = JSON.parse(localStorage.getItem("currentUser") || "null");
-let chartInstance = null;
 
 function showView(id) {
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
@@ -15,7 +14,7 @@ function clearSession() {
   localStorage.removeItem("currentUser");
 }
 
-/* ---------- Initials fallback avatar (random-but-deterministic color + first 2 letters) ---------- */
+/* ---------- Initials fallback avatar (deterministic color + first 2 letters) ---------- */
 function hashStringToHue(str) {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -93,7 +92,7 @@ document.getElementById("logout-btn").onclick = () => {
 async function enterDashboard() {
   document.getElementById("welcome-msg").textContent = `Hi, ${currentUser.username}!`;
   showView("dashboard-view");
-  await renderChart();
+  await renderLeaderboard();
   await renderCarousel();
 }
 
@@ -107,71 +106,65 @@ async function fetchLeaderboard() {
   return res.json();
 }
 
-async function renderChart() {
+/* ---------- Leaderboard: stat cards + ranked list ---------- */
+async function renderLeaderboard() {
   const data = await fetchLeaderboard();
   if (!data) return;
-  const ctx = document.getElementById("leaderboard-chart").getContext("2d");
-  const counts = data.map(u => Number(u.activity_count));
-  const maxCount = Math.max(...counts, 0);
-  const maxIndex = counts.indexOf(maxCount);
 
-  if (chartInstance) chartInstance.destroy();
+  // Sort by activity count descending to determine rank.
+  const sorted = [...data]
+    .map(u => ({ ...u, activity_count: Number(u.activity_count) }))
+    .sort((a, b) => b.activity_count - a.activity_count);
 
-  const avatarImages = data.map(u => {
-    const img = new Image();
-    img.src = getAvatarUrl(u);
-    return img;
-  });
+  const topCount = sorted.length ? sorted[0].activity_count : 0;
+  const secondCount = sorted.length > 1 ? sorted[1].activity_count : 0;
+  // Only show the crown on the top user if they have strictly more
+  // activities logged than the second-highest scorer (and it's > 0).
+  const hasSoleLeader = topCount > 0 && topCount > secondCount;
 
-  const avatarPlugin = {
-    id: "avatarPlugin",
-    afterDraw(chart) {
-      const { ctx, scales: { x, y } } = chart;
-      data.forEach((u, i) => {
-        const img = avatarImages[i];
-        const xPos = x.getPixelForTick(i);
-        const size = 32;
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(xPos, x.bottom + 22, size / 2, 0, Math.PI * 2);
-        ctx.closePath(); ctx.clip();
-        ctx.drawImage(img, xPos - size/2, x.bottom + 6, size, size);
-        ctx.restore();
+  const totalWorkouts = sorted.reduce((sum, u) => sum + u.activity_count, 0);
 
-        if (i === maxIndex && maxCount > 0) {
-          const barTop = y.getPixelForValue(counts[i]);
-          ctx.font = "bold 13px sans-serif";
-          ctx.fillStyle = "#f59e0b";
-          ctx.textAlign = "center";
-          ctx.fillText(`👑 ${counts[i]}`, xPos, barTop - 10);
-        }
-      });
-    }
-  };
+  // Stat cards: current user's rank + total workouts across everyone.
+  const myIndex = sorted.findIndex(u => currentUser && Number(u.id) === Number(currentUser.id));
+  document.getElementById("stat-rank").textContent = myIndex >= 0 ? `#${myIndex + 1}` : "#-";
+  document.getElementById("stat-rank-sub").textContent = `Out of ${sorted.length}`;
+  document.getElementById("stat-total").textContent = totalWorkouts;
+  document.getElementById("stat-total-sub").textContent = "This month";
 
-  chartInstance = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: data.map(u => u.username),
-      datasets: [{
-        label: "Activities this month",
-        data: counts,
-        backgroundColor: data.map((_, i) => i === maxIndex && maxCount > 0 ? "#f59e0b" : "#4f46e5"),
-        borderRadius: 6,
-        maxBarThickness: 40
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      layout: { padding: { bottom: 36, top: 26 } },
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, ticks: { stepSize: 1 } },
-        x: { ticks: { display: false } }
-      }
-    },
-    plugins: [avatarPlugin]
+  const maxCount = topCount || 1;
+  const list = document.getElementById("leaderboard-list");
+  list.innerHTML = "";
+
+  sorted.forEach((u, i) => {
+    const rank = i + 1;
+    const isMe = currentUser && Number(u.id) === Number(currentUser.id);
+
+    let badgeHtml = `<span class="rank-number rank-${rank <= 3 ? rank : 'other'}">${rank}</span>`;
+    let medalHtml = "";
+    if (rank === 1 && hasSoleLeader) medalHtml = `<span class="rank-medal">🔥</span>`;
+    else if (rank === 2) medalHtml = `<span class="rank-medal">🥈</span>`;
+    else if (rank === 3) medalHtml = `<span class="rank-medal">🥉</span>`;
+
+    const pct = Math.max(4, Math.round((u.activity_count / maxCount) * 100));
+    const unit = u.activity_count === 1 ? "workout" : "workouts";
+
+    const row = document.createElement("div");
+    row.className = `leaderboard-row${isMe ? " leaderboard-row-me" : ""}`;
+    row.innerHTML = `
+      ${badgeHtml}
+      <img class="leaderboard-avatar" src="${getAvatarUrl(u)}" alt="${u.username}">
+      <div class="leaderboard-main-col">
+        <div class="leaderboard-name">${u.username}${isMe ? " (You)" : ""}</div>
+        <div class="leaderboard-bar-outer"><div class="leaderboard-bar-inner" style="width:${pct}%"></div></div>
+      </div>
+      <div class="leaderboard-count">
+        <div class="leaderboard-count-num">${u.activity_count}</div>
+        <div class="leaderboard-count-unit">${unit}</div>
+      </div>
+      ${medalHtml}
+    `;
+    row.onclick = () => openUserDetail(u.id, u.username, u.avatar);
+    list.appendChild(row);
   });
 }
 
@@ -334,7 +327,7 @@ document.getElementById("delete-account-btn").onclick = async () => {
 
 document.getElementById("back-to-dashboard").onclick = () => {
   showView("dashboard-view");
-  renderChart(); renderCarousel();
+  renderLeaderboard(); renderCarousel();
 };
 
 const modal = document.getElementById("log-modal");
@@ -384,7 +377,7 @@ document.getElementById("capture-submit").onclick = async () => {
   }
   if (!res.ok) { alert("Failed to log activity"); return; }
   modal.hidden = true;
-  await renderChart();
+  await renderLeaderboard();
 };
 
 /* ---------- Session refresh: keep the 12h token alive across page reloads ---------- */
