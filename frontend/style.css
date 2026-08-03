@@ -34,12 +34,49 @@ body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-se
 .carousel-item:hover img { transform: scale(1.06); border-color: #4f46e5; }
 .carousel-item span { font-size: 12px; color: #444; text-align: center; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .detail-main { max-width: 600px; margin: 0 auto; padding: 24px; text-align: center; }
-.detail-avatar { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 12px; }
+.detail-avatar-wrapper { position: relative; display: inline-block; margin-bottom: 12px; }
+.detail-avatar { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; display: block; }
+.change-avatar-btn {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #4f46e5;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.change-avatar-btn:hover { background: #4338ca; }
 .progress-bar-outer { background: #e5e7eb; border-radius: 999px; height: 10px; overflow: hidden; margin: 8px 0 24px; }
 .progress-bar-inner { background: #22c55e; height: 100%; width: 0%; transition: width .3s; }
 .activity-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 12px; }
-.activity-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; }
-.activity-card { font-size: 11px; color: #666; }
+.activity-card { position: relative; font-size: 11px; color: #666; }
+.activity-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; }
+.activity-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(239,68,68,0.9);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.activity-delete-btn:hover { background: #dc2626; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .modal-overlay[hidden] { display: none; }
 .modal-card { background: #fff; padding: 28px; border-radius: 16px; width: 320px; text-align: center; }
