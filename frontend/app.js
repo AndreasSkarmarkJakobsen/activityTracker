@@ -104,20 +104,20 @@ async function renderChart() {
         const img = new Image();
         img.src = u.avatar || "/uploads/default-avatar.png";
         const xPos = x.getPixelForTick(i);
-        const size = 36;
+        const size = 32;
         ctx.save();
         ctx.beginPath();
-        ctx.arc(xPos, x.bottom + 26, size / 2, 0, Math.PI * 2);
+        ctx.arc(xPos, x.bottom + 22, size / 2, 0, Math.PI * 2);
         ctx.closePath(); ctx.clip();
-        ctx.drawImage(img, xPos - size/2, x.bottom + 8, size, size);
+        ctx.drawImage(img, xPos - size/2, x.bottom + 6, size, size);
         ctx.restore();
 
         if (i === maxIndex && maxCount > 0) {
           const barTop = y.getPixelForValue(counts[i]);
-          ctx.font = "bold 14px sans-serif";
+          ctx.font = "bold 13px sans-serif";
           ctx.fillStyle = "#f59e0b";
           ctx.textAlign = "center";
-          ctx.fillText(`👑 ${counts[i]}`, xPos, barTop - 12);
+          ctx.fillText(`👑 ${counts[i]}`, xPos, barTop - 10);
         }
       });
     }
@@ -132,12 +132,13 @@ async function renderChart() {
         data: counts,
         backgroundColor: data.map((_, i) => i === maxIndex && maxCount > 0 ? "#f59e0b" : "#4f46e5"),
         borderRadius: 6,
-        maxBarThickness: 50
+        maxBarThickness: 40
       }]
     },
     options: {
       responsive: true,
-      layout: { padding: { bottom: 40, top: 30 } },
+      maintainAspectRatio: false,
+      layout: { padding: { bottom: 36, top: 26 } },
       plugins: { legend: { display: false } },
       scales: {
         y: { beginAtZero: true, ticks: { stepSize: 1 } },
@@ -168,11 +169,19 @@ async function renderCarousel() {
 }
 
 document.getElementById("carousel-left").onclick = () =>
-  document.getElementById("carousel").scrollBy({ left: -160, behavior: "smooth" });
+  document.getElementById("carousel").scrollBy({ left: -140, behavior: "smooth" });
 document.getElementById("carousel-right").onclick = () =>
-  document.getElementById("carousel").scrollBy({ left: 160, behavior: "smooth" });
+  document.getElementById("carousel").scrollBy({ left: 140, behavior: "smooth" });
+
+let currentDetailUserId = null;
+let currentDetailUsername = null;
+let currentDetailAvatar = null;
 
 async function openUserDetail(userId, username, avatar) {
+  currentDetailUserId = userId;
+  currentDetailUsername = username;
+  currentDetailAvatar = avatar;
+
   const res = await fetch(`${API}/users/${userId}/activities`, { headers: authHeaders() });
   if (res.status === 401) {
     clearSession();
@@ -181,27 +190,98 @@ async function openUserDetail(userId, username, avatar) {
   }
   const acts = await res.json();
   const goal = 12;
+  const isOwnProfile = !!(currentUser && Number(userId) === Number(currentUser.id));
 
   document.getElementById("detail-username").textContent = username;
   document.getElementById("detail-avatar").src = avatar || "/uploads/default-avatar.png";
   document.getElementById("detail-progress").textContent = `${acts.length} / ${goal} activities logged this month`;
   document.getElementById("detail-progress-fill").style.width = `${Math.min(100, (acts.length / goal) * 100)}%`;
 
+  // Show/hide the "change avatar" control depending on whether this is the logged-in user's own profile
+  const changeAvatarBtn = document.getElementById("change-avatar-btn");
+  changeAvatarBtn.hidden = !isOwnProfile;
+
   const list = document.getElementById("detail-activity-list");
   list.innerHTML = "";
   if (acts.length === 0) {
-    list.innerHTML = `<p style="grid-column:1/-1;color:#888;">No activities logged yet this month.</p>`;
+    list.innerHTML = `<p class="empty-msg">No activities logged yet this month.</p>`;
   } else {
     acts.forEach(a => {
       const card = document.createElement("div");
       card.className = "activity-card";
       const dateStr = new Date(a.logged_at).toLocaleDateString();
-      card.innerHTML = `<img src="${a.image_path}" alt="activity"><div>${dateStr}</div>`;
+      const deleteBtnHtml = isOwnProfile
+        ? `<button class="activity-delete-btn" data-activity-id="${a.id}" aria-label="Delete activity" title="Delete activity">✕</button>`
+        : "";
+      card.innerHTML = `${deleteBtnHtml}<img src="${a.image_path}" alt="activity"><div class="activity-date">${dateStr}</div>`;
       list.appendChild(card);
     });
+
+    if (isOwnProfile) {
+      list.querySelectorAll(".activity-delete-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+          e.stopPropagation();
+          deleteActivity(btn.dataset.activityId);
+        });
+      });
+    }
   }
   showView("user-detail-view");
 }
+
+async function deleteActivity(activityId) {
+  if (!confirm("Delete this activity? This cannot be undone.")) return;
+  const res = await fetch(`${API}/activities/${activityId}`, {
+    method: "DELETE",
+    headers: authHeaders()
+  });
+  if (res.status === 401) {
+    clearSession();
+    showView("login-view");
+    return;
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || "Failed to delete activity");
+    return;
+  }
+  // Refresh the detail view to reflect the deletion
+  await openUserDetail(currentDetailUserId, currentDetailUsername, currentDetailAvatar);
+}
+
+document.getElementById("change-avatar-input").onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append("avatar", file);
+
+  const res = await fetch(`${API}/users/me/avatar`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: formData
+  });
+  if (res.status === 401) {
+    clearSession();
+    showView("login-view");
+    return;
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || "Failed to update profile picture");
+    return;
+  }
+  const updatedUser = await res.json();
+
+  // Update local session copy of currentUser
+  currentUser = { ...currentUser, avatar: updatedUser.avatar };
+  localStorage.setItem("currentUser", JSON.stringify(currentUser));
+  currentDetailAvatar = updatedUser.avatar;
+
+  document.getElementById("detail-avatar").src = updatedUser.avatar;
+  e.target.value = "";
+};
+
 document.getElementById("back-to-dashboard").onclick = () => {
   showView("dashboard-view");
   renderChart(); renderCarousel();
@@ -218,6 +298,9 @@ document.getElementById("log-activity-btn").onclick = () => {
   modal.hidden = false;
 };
 document.getElementById("capture-cancel").onclick = () => { modal.hidden = true; };
+modal.addEventListener("click", e => {
+  if (e.target === modal) modal.hidden = true;
+});
 
 function handleFileInput(e) {
   const file = e.target.files[0];
