@@ -41,6 +41,7 @@ body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-se
 .activity-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; }
 .activity-card { font-size: 11px; color: #666; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal-overlay[hidden] { display: none; }
 .modal-card { background: #fff; padding: 28px; border-radius: 16px; width: 320px; text-align: center; }
 .capture-options { display: flex; gap: 10px; margin: 16px 0; }
 .capture-btn { flex: 1; padding: 12px 8px; border: 2px dashed #ccc; border-radius: 10px; font-size: 13px; cursor: pointer; }
