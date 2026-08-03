@@ -111,18 +111,12 @@ async function renderLeaderboard() {
   const data = await fetchLeaderboard();
   if (!data) return;
 
-  // Sort by activity count descending to determine rank.
   const sorted = [...data]
     .map(u => ({ ...u, activity_count: Number(u.activity_count) }))
     .sort((a, b) => b.activity_count - a.activity_count);
 
-  const topCount = sorted.length ? sorted[0].activity_count : 0;
-  const secondCount = sorted.length > 1 ? sorted[1].activity_count : 0;
-  // Only show the crown on the top user if they have strictly more
-  // activities logged than the second-highest scorer (and it's > 0).
-  const hasSoleLeader = topCount > 0 && topCount > secondCount;
-
   const totalWorkouts = sorted.reduce((sum, u) => sum + u.activity_count, 0);
+  const maxCount = sorted.length ? sorted[0].activity_count : 0;
 
   // Stat cards: current user's rank + total workouts across everyone.
   const myIndex = sorted.findIndex(u => currentUser && Number(u.id) === Number(currentUser.id));
@@ -131,21 +125,42 @@ async function renderLeaderboard() {
   document.getElementById("stat-total").textContent = totalWorkouts;
   document.getElementById("stat-total-sub").textContent = "This month";
 
-  const maxCount = topCount || 1;
   const list = document.getElementById("leaderboard-list");
   list.innerHTML = "";
 
+  // Standard competition ranking (1224 style): a user's rank is
+  // 1 + the number of people with a strictly higher count. Users with the
+  // same count share the same rank. A medal is only ever awarded when the
+  // rank is 1, 2, or 3 AND exactly one person occupies that rank (no tie)
+  // AND their count is greater than 0 - so if everyone (or the top group)
+  // is tied, nobody gets a medal.
+  const ranks = sorted.map(u => {
+    const higher = sorted.filter(other => other.activity_count > u.activity_count).length;
+    return higher + 1;
+  });
+  const rankGroupSize = rank => ranks.filter(r => r === rank).length;
+
   sorted.forEach((u, i) => {
-    const rank = i + 1;
+    const rank = ranks[i];
     const isMe = currentUser && Number(u.id) === Number(currentUser.id);
+    const isUniqueRank = rankGroupSize(rank) === 1 && u.activity_count > 0;
 
-    let badgeHtml = `<span class="rank-number rank-${rank <= 3 ? rank : 'other'}">${rank}</span>`;
-    let medalHtml = "";
-    if (rank === 1 && hasSoleLeader) medalHtml = `<span class="rank-medal">🔥</span>`;
-    else if (rank === 2) medalHtml = `<span class="rank-medal">🥈</span>`;
-    else if (rank === 3) medalHtml = `<span class="rank-medal">🥉</span>`;
+    const rankClass = rank <= 3 ? rank : "other";
+    const badgeHtml = `<span class="rank-number rank-${rankClass}">${rank}</span>`;
 
-    const pct = Math.max(4, Math.round((u.activity_count / maxCount) * 100));
+    let medalIcon = "";
+    if (isUniqueRank && rank === 1) medalIcon = "🔥";
+    else if (isUniqueRank && rank === 2) medalIcon = "🥈";
+    else if (isUniqueRank && rank === 3) medalIcon = "🥉";
+    // Medal slot is always rendered (even when empty) so every row's
+    // name/bar column keeps the exact same width regardless of whether
+    // a medal icon is shown - this keeps the progress bars comparable.
+    const medalHtml = `<span class="rank-medal">${medalIcon}</span>`;
+
+    // Bar width is relative to the top score, with a small minimum so a
+    // count of 0 is still visible as an (almost) empty bar rather than
+    // looking identical to a bar with a real, larger, hidden minimum.
+    const pct = maxCount > 0 ? Math.max(2, Math.round((u.activity_count / maxCount) * 100)) : 0;
     const unit = u.activity_count === 1 ? "workout" : "workouts";
 
     const row = document.createElement("div");
