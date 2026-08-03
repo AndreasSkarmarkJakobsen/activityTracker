@@ -184,6 +184,24 @@ app.put("/api/users/me/avatar", authRequired, upload.single("avatar"), async (re
   res.json(result.rows[0]);
 });
 
+// --- Delete the logged-in user's own account (and all their activities + uploaded files) ---
+app.delete("/api/users/me", authRequired, async (req, res) => {
+  const userResult = await pool.query("SELECT avatar FROM users WHERE id = $1", [req.user.id]);
+  const user = userResult.rows[0];
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const activitiesResult = await pool.query("SELECT image_path FROM activities WHERE user_id = $1", [req.user.id]);
+
+  // activities are removed automatically via ON DELETE CASCADE on the FK,
+  // but we still need to clean up the uploaded files from disk.
+  await pool.query("DELETE FROM users WHERE id = $1", [req.user.id]);
+
+  activitiesResult.rows.forEach(a => deleteUploadedFile(a.image_path));
+  if (user.avatar) deleteUploadedFile(user.avatar);
+
+  res.json({ success: true });
+});
+
 // Fallback to SPA
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
