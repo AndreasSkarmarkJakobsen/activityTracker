@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Activity Challenge</title>
 <link rel="stylesheet" href="style.css" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -47,7 +47,7 @@
       </div>
     </header>
     <main class="dashboard-main">
-      <div class="chart-card"><canvas id="leaderboard-chart" height="140"></canvas></div>
+      <div class="chart-card"><canvas id="leaderboard-chart"></canvas></div>
       <button id="log-activity-btn" class="fab-log-btn">📸 Log Activity</button>
       <h2 class="section-title">Participants</h2>
       <div class="carousel-wrapper">
@@ -65,7 +65,13 @@
       <div></div>
     </header>
     <main class="detail-main">
-      <img id="detail-avatar" class="detail-avatar" />
+      <div class="detail-avatar-wrapper">
+        <img id="detail-avatar" class="detail-avatar" />
+        <label id="change-avatar-btn" class="change-avatar-btn" hidden>
+          📷
+          <input type="file" id="change-avatar-input" accept="image/*" hidden />
+        </label>
+      </div>
       <p id="detail-progress"></p>
       <div class="progress-bar-outer"><div id="detail-progress-fill" class="progress-bar-inner"></div></div>
       <h3>Logged Activities</h3>
