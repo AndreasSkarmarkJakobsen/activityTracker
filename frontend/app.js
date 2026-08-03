@@ -15,6 +15,27 @@ function clearSession() {
   localStorage.removeItem("currentUser");
 }
 
+/* ---------- Initials fallback avatar (random-but-deterministic color + first 2 letters) ---------- */
+function hashStringToHue(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash) % 360;
+}
+function getAvatarUrl(user) {
+  if (user && user.avatar) return user.avatar;
+  const username = (user && user.username) || "??";
+  const initials = username.slice(0, 2).toUpperCase();
+  const hue = hashStringToHue(username);
+  const bg = `hsl(${hue}, 60%, 45%)`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+    <rect width="100" height="100" rx="50" fill="${bg}"/>
+    <text x="50" y="54" font-size="40" fill="#fff" text-anchor="middle" font-family="-apple-system, Arial, sans-serif" font-weight="600">${initials}</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 document.getElementById("show-register").onclick = e => { e.preventDefault(); showView("register-view"); };
 document.getElementById("show-login").onclick = e => { e.preventDefault(); showView("login-view"); };
 
@@ -96,13 +117,18 @@ async function renderChart() {
 
   if (chartInstance) chartInstance.destroy();
 
+  const avatarImages = data.map(u => {
+    const img = new Image();
+    img.src = getAvatarUrl(u);
+    return img;
+  });
+
   const avatarPlugin = {
     id: "avatarPlugin",
     afterDraw(chart) {
       const { ctx, scales: { x, y } } = chart;
       data.forEach((u, i) => {
-        const img = new Image();
-        img.src = u.avatar || "/uploads/default-avatar.png";
+        const img = avatarImages[i];
         const xPos = x.getPixelForTick(i);
         const size = 32;
         ctx.save();
@@ -162,7 +188,7 @@ async function renderCarousel() {
   users.forEach(u => {
     const item = document.createElement("div");
     item.className = "carousel-item";
-    item.innerHTML = `<img src="${u.avatar || '/uploads/default-avatar.png'}" alt="${u.username}"><span>${u.username}</span>`;
+    item.innerHTML = `<img src="${getAvatarUrl(u)}" alt="${u.username}"><span>${u.username}</span>`;
     item.onclick = () => openUserDetail(u.id, u.username, u.avatar);
     carousel.appendChild(item);
   });
@@ -193,13 +219,14 @@ async function openUserDetail(userId, username, avatar) {
   const isOwnProfile = !!(currentUser && Number(userId) === Number(currentUser.id));
 
   document.getElementById("detail-username").textContent = username;
-  document.getElementById("detail-avatar").src = avatar || "/uploads/default-avatar.png";
+  document.getElementById("detail-avatar").src = getAvatarUrl({ username, avatar });
   document.getElementById("detail-progress").textContent = `${acts.length} / ${goal} activities logged this month`;
   document.getElementById("detail-progress-fill").style.width = `${Math.min(100, (acts.length / goal) * 100)}%`;
 
-  // Show/hide the "change avatar" control depending on whether this is the logged-in user's own profile
-  const changeAvatarBtn = document.getElementById("change-avatar-btn");
-  changeAvatarBtn.hidden = !isOwnProfile;
+  // Show/hide the "change avatar" control and "delete account" button
+  // depending on whether this is the logged-in user's own profile.
+  document.getElementById("change-avatar-btn").hidden = !isOwnProfile;
+  document.getElementById("delete-account-btn").hidden = !isOwnProfile;
 
   const list = document.getElementById("detail-activity-list");
   list.innerHTML = "";
@@ -278,8 +305,31 @@ document.getElementById("change-avatar-input").onchange = async e => {
   localStorage.setItem("currentUser", JSON.stringify(currentUser));
   currentDetailAvatar = updatedUser.avatar;
 
-  document.getElementById("detail-avatar").src = updatedUser.avatar;
+  document.getElementById("detail-avatar").src = getAvatarUrl(updatedUser);
   e.target.value = "";
+};
+
+document.getElementById("delete-account-btn").onclick = async () => {
+  if (!confirm("Delete your account? This will permanently remove your profile and all your logged activities. This cannot be undone.")) return;
+  if (!confirm("Are you absolutely sure? This action is irreversible.")) return;
+
+  const res = await fetch(`${API}/users/me`, {
+    method: "DELETE",
+    headers: authHeaders()
+  });
+  if (res.status === 401) {
+    clearSession();
+    showView("login-view");
+    return;
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert(data.error || "Failed to delete account");
+    return;
+  }
+  alert("Your account has been deleted.");
+  clearSession();
+  showView("login-view");
 };
 
 document.getElementById("back-to-dashboard").onclick = () => {
@@ -337,8 +387,30 @@ document.getElementById("capture-submit").onclick = async () => {
   await renderChart();
 };
 
+/* ---------- Session refresh: keep the 12h token alive across page reloads ---------- */
+async function refreshSession() {
+  try {
+    const res = await fetch(`${API}/refresh`, { method: "POST", headers: authHeaders() });
+    if (!res.ok) {
+      clearSession();
+      showView("login-view");
+      return false;
+    }
+    const data = await res.json();
+    token = data.token; currentUser = data.user;
+    localStorage.setItem("token", token);
+    localStorage.setItem("currentUser", JSON.stringify(currentUser));
+    return true;
+  } catch {
+    // Network error: keep existing session, let subsequent API calls handle 401s
+    return true;
+  }
+}
+
 /* ---------- Init: always start on login unless a valid session exists ---------- */
 showView("login-view");
 if (token && currentUser) {
-  enterDashboard();
+  refreshSession().then(ok => {
+    if (ok) enterDashboard();
+  });
 }
