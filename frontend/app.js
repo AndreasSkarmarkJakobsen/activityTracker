@@ -9,6 +9,12 @@ function showView(id) {
 }
 function authHeaders() { return { Authorization: `Bearer ${token}` }; }
 
+function clearSession() {
+  token = null; currentUser = null;
+  localStorage.removeItem("token");
+  localStorage.removeItem("currentUser");
+}
+
 document.getElementById("show-register").onclick = e => { e.preventDefault(); showView("register-view"); };
 document.getElementById("show-login").onclick = e => { e.preventDefault(); showView("login-view"); };
 
@@ -59,8 +65,7 @@ document.getElementById("register-form").onsubmit = async e => {
 };
 
 document.getElementById("logout-btn").onclick = () => {
-  token = null; currentUser = null;
-  localStorage.removeItem("token"); localStorage.removeItem("currentUser");
+  clearSession();
   showView("login-view");
 };
 
@@ -73,12 +78,17 @@ async function enterDashboard() {
 
 async function fetchLeaderboard() {
   const res = await fetch(`${API}/leaderboard`, { headers: authHeaders() });
-  if (res.status === 401) { showView("login-view"); return []; }
+  if (res.status === 401) {
+    clearSession();
+    showView("login-view");
+    return null;
+  }
   return res.json();
 }
 
 async function renderChart() {
   const data = await fetchLeaderboard();
+  if (!data) return;
   const ctx = document.getElementById("leaderboard-chart").getContext("2d");
   const counts = data.map(u => Number(u.activity_count));
   const maxCount = Math.max(...counts, 0);
@@ -140,6 +150,11 @@ async function renderChart() {
 
 async function renderCarousel() {
   const res = await fetch(`${API}/users`, { headers: authHeaders() });
+  if (res.status === 401) {
+    clearSession();
+    showView("login-view");
+    return;
+  }
   const users = await res.json();
   const carousel = document.getElementById("carousel");
   carousel.innerHTML = "";
@@ -159,6 +174,11 @@ document.getElementById("carousel-right").onclick = () =>
 
 async function openUserDetail(userId, username, avatar) {
   const res = await fetch(`${API}/users/${userId}/activities`, { headers: authHeaders() });
+  if (res.status === 401) {
+    clearSession();
+    showView("login-view");
+    return;
+  }
   const acts = await res.json();
   const goal = 12;
 
@@ -223,10 +243,19 @@ document.getElementById("capture-submit").onclick = async () => {
   const res = await fetch(`${API}/activities`, {
     method: "POST", headers: authHeaders(), body: formData
   });
+  if (res.status === 401) {
+    clearSession();
+    modal.hidden = true;
+    showView("login-view");
+    return;
+  }
   if (!res.ok) { alert("Failed to log activity"); return; }
   modal.hidden = true;
   await renderChart();
 };
 
-if (token && currentUser) enterDashboard();
-else showView("login-view");
+/* ---------- Init: always start on login unless a valid session exists ---------- */
+showView("login-view");
+if (token && currentUser) {
+  enterDashboard();
+}
