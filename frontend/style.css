@@ -183,6 +183,7 @@ button, input, label { font-family: inherit; }
   border: 2px solid #fff;
   box-shadow: 0 2px 6px rgba(0,0,0,0.2);
 }
+.change-avatar-btn[hidden] { display: none; }
 .change-avatar-btn:active { background: #4338ca; }
 .progress-bar-outer { background: #e5e7eb; border-radius: 999px; height: 10px; overflow: hidden; margin: 8px 0 20px; }
 .progress-bar-inner { background: #22c55e; height: 100%; width: 0%; transition: width .3s; }
@@ -232,6 +233,7 @@ button, input, label { font-family: inherit; }
   font-size: 14px;
   cursor: pointer;
 }
+.delete-account-btn[hidden] { display: none; }
 .delete-account-btn:active { background: #ef4444; color: #fff; }
 
 /* ---------- Log activity modal ---------- */
