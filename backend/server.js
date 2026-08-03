@@ -31,6 +31,15 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
 
+// Helper: delete an uploaded file from disk given its /uploads/<filename> path
+function deleteUploadedFile(imagePath) {
+  if (!imagePath || !imagePath.startsWith("/uploads/")) return;
+  const filePath = path.join(uploadDir, path.basename(imagePath));
+  fs.unlink(filePath, err => {
+    if (err && err.code !== "ENOENT") console.error("Failed to delete file:", filePath, err);
+  });
+}
+
 // --- Auth middleware ---
 function authRequired(req, res, next) {
   const authHeader = req.headers.authorization || "";
@@ -112,7 +121,7 @@ app.get("/api/leaderboard", authRequired, async (req, res) => {
 app.get("/api/users/:id/activities", authRequired, async (req, res) => {
   const { id } = req.params;
   const result = await pool.query(`
-    SELECT id, image_path, note, logged_at
+    SELECT id, user_id, image_path, note, logged_at
     FROM activities
     WHERE user_id = $1
       AND date_trunc('month', logged_at) = date_trunc('month', now())
@@ -131,6 +140,37 @@ app.post("/api/activities", authRequired, upload.single("photo"), async (req, re
     "INSERT INTO activities (user_id, image_path, note) VALUES ($1,$2,$3) RETURNING *",
     [req.user.id, imagePath, note]
   );
+  res.json(result.rows[0]);
+});
+
+// --- Delete an activity (only the owning user can delete their own) ---
+app.delete("/api/activities/:id", authRequired, async (req, res) => {
+  const { id } = req.params;
+  const result = await pool.query("SELECT * FROM activities WHERE id = $1", [id]);
+  const activity = result.rows[0];
+  if (!activity) return res.status(404).json({ error: "Activity not found" });
+  if (activity.user_id !== req.user.id) return res.status(403).json({ error: "You can only delete your own activities" });
+
+  await pool.query("DELETE FROM activities WHERE id = $1", [id]);
+  deleteUploadedFile(activity.image_path);
+  res.json({ success: true });
+});
+
+// --- Update the logged-in user's own profile picture ---
+app.put("/api/users/me/avatar", authRequired, upload.single("avatar"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Avatar photo is required" });
+  const newAvatarPath = `/uploads/${req.file.filename}`;
+
+  const existing = await pool.query("SELECT avatar FROM users WHERE id = $1", [req.user.id]);
+  const oldAvatar = existing.rows[0] ? existing.rows[0].avatar : null;
+
+  const result = await pool.query(
+    "UPDATE users SET avatar = $1 WHERE id = $2 RETURNING id, username, avatar",
+    [newAvatarPath, req.user.id]
+  );
+
+  if (oldAvatar) deleteUploadedFile(oldAvatar);
+
   res.json(result.rows[0]);
 });
 
