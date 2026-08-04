@@ -248,8 +248,18 @@ async function openUserDetail(userId, username, avatar) {
       const deleteBtnHtml = isOwnProfile
         ? `<button class="activity-delete-btn" data-activity-id="${a.id}" aria-label="Delete activity" title="Delete activity">✕</button>`
         : "";
-      card.innerHTML = `${deleteBtnHtml}<img src="${a.image_path}" alt="activity"><div class="activity-date">${dateStr}</div>`;
+      const noteHtml = a.note
+        ? `<div class="activity-note">${a.note}</div>`
+        : "";
+      card.innerHTML = `${deleteBtnHtml}<img src="${a.image_path}" alt="activity" class="activity-photo"><div class="activity-date">${dateStr}</div>${noteHtml}`;
       list.appendChild(card);
+
+      // Clicking the photo opens a lightbox showing the enlarged image
+      // and its note underneath, closing again on an outside click.
+      card.querySelector(".activity-photo").addEventListener("click", e => {
+        e.stopPropagation();
+        openLightbox(a.image_path, a.note);
+      });
     });
 
     if (isOwnProfile) {
@@ -263,6 +273,26 @@ async function openUserDetail(userId, username, avatar) {
   }
   showView("user-detail-view");
 }
+
+/* ---------- Lightbox: enlarge a clicked activity photo ---------- */
+const lightbox = document.getElementById("photo-lightbox");
+const lightboxImage = document.getElementById("lightbox-image");
+const lightboxNote = document.getElementById("lightbox-note");
+
+function openLightbox(imageSrc, note) {
+  lightboxImage.src = imageSrc;
+  lightboxNote.textContent = note || "";
+  lightboxNote.hidden = !note;
+  lightbox.hidden = false;
+}
+function closeLightbox() {
+  lightbox.hidden = true;
+  lightboxImage.src = "";
+}
+// Close when clicking anywhere on the overlay outside the enlarged image/note.
+lightbox.addEventListener("click", e => {
+  if (e.target === lightbox) closeLightbox();
+});
 
 async function deleteActivity(activityId) {
   if (!confirm("Delete this activity? This cannot be undone.")) return;
