@@ -35,6 +35,14 @@ function getAvatarUrl(user) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+/* ---------- Format a logged_at timestamp as "date, HH:MM" in 24h time ---------- */
+function formatActivityTimestamp(logged_at) {
+  const d = new Date(logged_at);
+  const dateStr = d.toLocaleDateString();
+  const timeStr = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${dateStr}, ${timeStr}`;
+}
+
 document.getElementById("show-register").onclick = e => { e.preventDefault(); showView("register-view"); };
 document.getElementById("show-login").onclick = e => { e.preventDefault(); showView("login-view"); };
 
@@ -244,7 +252,7 @@ async function openUserDetail(userId, username, avatar) {
     acts.forEach(a => {
       const card = document.createElement("div");
       card.className = "activity-card";
-      const dateStr = new Date(a.logged_at).toLocaleDateString();
+      const dateStr = formatActivityTimestamp(a.logged_at);
       const deleteBtnHtml = isOwnProfile
         ? `<button class="activity-delete-btn" data-activity-id="${a.id}" aria-label="Delete activity" title="Delete activity">✕</button>`
         : "";
