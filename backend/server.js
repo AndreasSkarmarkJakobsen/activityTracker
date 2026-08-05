@@ -257,6 +257,42 @@ app.put("/api/users/me/avatar", authRequired, upload.single("avatar"), async (re
   res.json(result.rows[0]);
 });
 
+// --- Update the logged-in user's own username ---
+app.put("/api/users/me/username", authRequired, async (req, res) => {
+  try {
+    const username = (req.body.username || "").trim();
+    if (!username) return res.status(400).json({ error: "Username is required" });
+
+    const taken = await pool.query("SELECT id FROM users WHERE username = $1 AND id != $2", [username, req.user.id]);
+    if (taken.rows.length) return res.status(409).json({ error: "Username already taken" });
+
+    const result = await pool.query(
+      "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, avatar",
+      [username, req.user.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// --- Update the logged-in user's own password ---
+app.put("/api/users/me/password", authRequired, async (req, res) => {
+  try {
+    const password = req.body.password || "";
+    if (!password) return res.status(400).json({ error: "Password is required" });
+    if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+
+    const hash = await bcrypt.hash(password, 10);
+    await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [hash, req.user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // --- Delete the logged-in user's own account (and all their activities + uploaded files) ---
 app.delete("/api/users/me", authRequired, async (req, res) => {
   const deleted = await deleteUserById(req.user.id);

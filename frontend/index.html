@@ -99,7 +99,32 @@
       <div class="progress-bar-outer"><div id="detail-progress-fill" class="progress-bar-inner"></div></div>
       <h3>Logged Activities</h3>
       <div id="detail-activity-list" class="activity-grid"></div>
-      <button id="delete-account-btn" class="delete-account-btn" hidden>🗑️ Delete My Account</button>
+
+      <div id="account-settings" class="account-settings-card" hidden>
+        <h3 class="account-settings-title">⚙️ Account Settings</h3>
+
+        <div class="account-settings-section">
+          <div class="account-settings-label">Change Username</div>
+          <div class="account-settings-row">
+            <input type="text" id="new-username-input" class="account-settings-input" placeholder="New username" />
+            <button id="save-username-btn" class="account-settings-btn">Save</button>
+          </div>
+          <div id="username-feedback" class="account-settings-feedback" hidden></div>
+        </div>
+
+        <div class="account-settings-section">
+          <div class="account-settings-label">Change Password</div>
+          <div class="account-settings-row">
+            <input type="password" id="new-password-input" class="account-settings-input" placeholder="New password (min 6 chars)" />
+            <button id="save-password-btn" class="account-settings-btn">Save</button>
+          </div>
+          <div id="password-feedback" class="account-settings-feedback" hidden></div>
+        </div>
+
+        <div class="account-settings-section">
+          <button id="delete-account-btn" class="delete-account-btn">🗑️ Delete My Account</button>
+        </div>
+      </div>
     </main>
   </section>
 
