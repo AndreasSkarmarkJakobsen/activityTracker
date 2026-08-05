@@ -35,7 +35,12 @@ async function unlock() {
   const { ok, data } = await apiRequest("GET", "/api/admin/users");
   if (ok) {
     document.getElementById("lock-section").style.display = "none";
-    document.getElementById("admin-section").style.display = "";
+    // NOTE: must explicitly set "block" here, not "" — #admin-section has a
+    // `display: none` rule in the stylesheet, and clearing the inline style
+    // (style.display = "") just falls back to that stylesheet rule, keeping
+    // the section (and the freshly-loaded user list inside it) invisible
+    // even though the DOM/content is populated correctly.
+    document.getElementById("admin-section").style.display = "block";
     loadUsers();
   } else {
     adminToken = null;
