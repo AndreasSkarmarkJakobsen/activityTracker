@@ -33,8 +33,10 @@ services:
       DATABASE_URL: postgres://activity:activity_pass@db:5432/activity_challenge
       JWT_SECRET: change_this_secret_in_production
       PORT: 3000
+      ADMIN_PORT: 3001
     ports:
       - "3000:3000"
+      - "3001:3001"
     volumes:
       - uploads_data:/app/uploads
 

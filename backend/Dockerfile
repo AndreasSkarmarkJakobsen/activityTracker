@@ -8,8 +8,9 @@ RUN npm install --omit=dev
 COPY backend/server.js ./
 COPY backend/db ./db
 COPY frontend ./public
+COPY frontend/admin.html frontend/admin.js ./admin-public/
 
 RUN mkdir -p /app/uploads
 
-EXPOSE 3000
+EXPOSE 3000 3001
 CMD ["node", "server.js"]
