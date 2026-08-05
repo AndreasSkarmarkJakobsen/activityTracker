@@ -246,10 +246,10 @@ async function openUserDetail(userId, username, avatar) {
   document.getElementById("detail-progress").textContent = `${acts.length} / ${goal} activities logged this month`;
   document.getElementById("detail-progress-fill").style.width = `${Math.min(100, (acts.length / goal) * 100)}%`;
 
-  // Show/hide the "change avatar" control and "delete account" button
+  // Show/hide the "change avatar" control and "account settings" section
   // depending on whether this is the logged-in user's own profile.
   document.getElementById("change-avatar-btn").hidden = !isOwnProfile;
-  document.getElementById("delete-account-btn").hidden = !isOwnProfile;
+  document.getElementById("account-settings").hidden = !isOwnProfile;
 
   const list = document.getElementById("detail-activity-list");
   list.innerHTML = "";
@@ -379,6 +379,12 @@ document.getElementById("change-avatar-input").onchange = async e => {
   e.target.value = "";
 };
 
+/* ---------- Lightbox: clicking the big profile avatar opens it enlarged ---------- */
+document.getElementById("detail-avatar").addEventListener("click", () => {
+  const src = document.getElementById("detail-avatar").src;
+  if (src) openLightbox(src, null, null, null, null);
+});
+
 document.getElementById("delete-account-btn").onclick = async () => {
   if (!confirm("Delete your account? This will permanently remove your profile and all your logged activities. This cannot be undone.")) return;
   if (!confirm("Are you absolutely sure? This action is irreversible.")) return;
@@ -405,6 +411,75 @@ document.getElementById("delete-account-btn").onclick = async () => {
 document.getElementById("back-to-dashboard").onclick = () => {
   showView("dashboard-view");
   renderLeaderboard(); renderCarousel();
+};
+
+document.getElementById("save-username-btn").onclick = async () => {
+  const username = document.getElementById("new-username-input").value.trim();
+  const feedback = document.getElementById("username-feedback");
+  feedback.hidden = true;
+  if (!username) {
+    feedback.textContent = "Please enter a username.";
+    feedback.className = "account-settings-feedback account-settings-feedback-error";
+    feedback.hidden = false;
+    return;
+  }
+  const res = await fetch(`${API}/users/me/username`, {
+    method: "PUT",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ username })
+  });
+  if (res.status === 401) {
+    clearSession();
+    showView("login-view");
+    return;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    feedback.textContent = data.error || "Failed to update username.";
+    feedback.className = "account-settings-feedback account-settings-feedback-error";
+    feedback.hidden = false;
+    return;
+  }
+  currentUser = { ...currentUser, username: data.username };
+  localStorage.setItem("currentUser", JSON.stringify(currentUser));
+  document.getElementById("welcome-msg").textContent = `Hi, ${data.username}!`;
+  document.getElementById("detail-username").textContent = data.username;
+  document.getElementById("new-username-input").value = "";
+  feedback.textContent = "Username updated!";
+  feedback.className = "account-settings-feedback account-settings-feedback-success";
+  feedback.hidden = false;
+};
+
+document.getElementById("save-password-btn").onclick = async () => {
+  const password = document.getElementById("new-password-input").value;
+  const feedback = document.getElementById("password-feedback");
+  feedback.hidden = true;
+  if (!password) {
+    feedback.textContent = "Please enter a new password.";
+    feedback.className = "account-settings-feedback account-settings-feedback-error";
+    feedback.hidden = false;
+    return;
+  }
+  const res = await fetch(`${API}/users/me/password`, {
+    method: "PUT",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ password })
+  });
+  if (res.status === 401) {
+    clearSession();
+    showView("login-view");
+    return;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    feedback.textContent = data.error || "Failed to update password.";
+    feedback.className = "account-settings-feedback account-settings-feedback-error";
+    feedback.hidden = false;
+    return;
+  }
+  alert("Password updated. Please log in again with your new password.");
+  clearSession();
+  showView("login-view");
 };
 
 const modal = document.getElementById("log-modal");
