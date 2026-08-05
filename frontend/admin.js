@@ -1,9 +1,6 @@
 // Admin token stored in memory only (not localStorage)
 let adminToken = null;
 
-// Admin API calls go to the main backend on port 3000
-const API_BASE = `${window.location.protocol}//${window.location.hostname}:3000`;
-
 function showMsg(elId, text, type) {
   const el = document.getElementById(elId);
   el.innerHTML = `<div class="msg ${type}">${text}</div>`;
@@ -13,12 +10,17 @@ function showMsg(elId, text, type) {
 async function apiRequest(method, path, body) {
   const opts = {
     method,
-    headers: { "X-Admin-Token": adminToken, "Content-Type": "application/json" }
+    headers: { "X-Admin-Token": adminToken, "Content-Type": "application/json" },
+    cache: "no-store"
   };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(`${API_BASE}${path}`, opts);
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
+  try {
+    const res = await fetch(path, opts);
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, data };
+  } catch (err) {
+    return { ok: false, status: 0, data: { error: "Could not reach the admin API. Check your network/reverse proxy configuration." } };
+  }
 }
 
 async function unlock() {
@@ -26,27 +28,33 @@ async function unlock() {
   if (!token) return;
   adminToken = token;
   // Verify token by calling the users endpoint
-  const { ok } = await apiRequest("GET", "/api/admin/users");
+  const { ok, data } = await apiRequest("GET", "/api/admin/users");
   if (ok) {
     document.getElementById("lock-section").style.display = "none";
     document.getElementById("admin-section").style.display = "";
     loadUsers();
   } else {
     adminToken = null;
-    showMsg("lock-msg", "Invalid token. Check docker compose logs.", "error");
+    const msg = data.error && data.error.startsWith("Could not reach")
+      ? data.error
+      : "Invalid token. Check docker compose logs.";
+    showMsg("lock-msg", msg, "error");
   }
 }
 
 async function loadUsers() {
   const listEl = document.getElementById("user-list");
   const { ok, data } = await apiRequest("GET", "/api/admin/users");
-  if (!ok) { listEl.textContent = "Failed to load users."; return; }
+  if (!ok) {
+    listEl.textContent = data.error || "Failed to load users.";
+    return;
+  }
   if (!data.length) { listEl.textContent = "No users found."; return; }
 
   listEl.innerHTML = data.map(u => `
     <div class="user-card" id="user-card-${u.id}">
       ${u.avatar
-        ? `<img class="user-avatar" src="${API_BASE}${u.avatar}" onerror="this.style.display='none'" />`
+        ? `<img class="user-avatar" src="${u.avatar}" onerror="this.style.display='none'" />`
         : `<div class="user-avatar"></div>`}
       <div class="user-info">
         <div class="user-name">${escHtml(u.username)}</div>

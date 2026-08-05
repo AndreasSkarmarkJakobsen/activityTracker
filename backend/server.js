@@ -264,13 +264,21 @@ app.delete("/api/users/me", authRequired, async (req, res) => {
   res.json({ success: true });
 });
 
-// --- Admin API routes (protected by admin token) ---
-app.get("/api/admin/users", adminRequired, async (req, res) => {
+// Middleware to set no-cache headers on all admin API responses
+function noCache(req, res, next) {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  next();
+}
+
+// --- Admin API route handlers (shared between main app and admin app) ---
+async function handleGetAdminUsers(req, res) {
   const result = await pool.query("SELECT id, username, avatar, created_at FROM users ORDER BY username");
   res.json(result.rows);
-});
+}
 
-app.put("/api/admin/users/:id/password", adminRequired, async (req, res) => {
+async function handleSetAdminPassword(req, res) {
   const { id } = req.params;
   const { password } = req.body;
   if (!password) return res.status(400).json({ error: "Password is required" });
@@ -278,14 +286,19 @@ app.put("/api/admin/users/:id/password", adminRequired, async (req, res) => {
   const result = await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, username", [hash, id]);
   if (!result.rows.length) return res.status(404).json({ error: "User not found" });
   res.json({ success: true, user: result.rows[0] });
-});
+}
 
-app.delete("/api/admin/users/:id", adminRequired, async (req, res) => {
+async function handleDeleteAdminUser(req, res) {
   const { id } = req.params;
   const deleted = await deleteUserById(parseInt(id, 10));
   if (!deleted) return res.status(404).json({ error: "User not found" });
   res.json({ success: true });
-});
+}
+
+// --- Admin API routes (protected by admin token) ---
+app.get("/api/admin/users", adminRequired, noCache, handleGetAdminUsers);
+app.put("/api/admin/users/:id/password", adminRequired, noCache, handleSetAdminPassword);
+app.delete("/api/admin/users/:id", adminRequired, noCache, handleDeleteAdminUser);
 
 // Multer error handler — must be 4-argument Express error middleware
 app.use((err, req, res, next) => {
@@ -309,6 +322,12 @@ app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 const adminApp = express();
 adminApp.use(cors());
 adminApp.use(express.json());
+// Mount admin API routes on the admin app so relative fetch() calls work from the admin UI
+adminApp.get("/api/admin/users", adminRequired, noCache, handleGetAdminUsers);
+adminApp.put("/api/admin/users/:id/password", adminRequired, noCache, handleSetAdminPassword);
+adminApp.delete("/api/admin/users/:id", adminRequired, noCache, handleDeleteAdminUser);
+// Serve uploaded files (avatars) so relative /uploads/... src attributes work on the admin UI
+adminApp.use("/uploads", express.static("/app/uploads"));
 adminApp.use(express.static(path.join(__dirname, "admin-public")));
 adminApp.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "admin-public", "admin.html"));
