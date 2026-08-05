@@ -1,6 +1,10 @@
 // Admin token stored in memory only (not localStorage)
 let adminToken = null;
 
+const API_BASE = window.location.hostname === "admin.activity.skarmark.dev"
+  ? "https://admin.activity.skarmark.dev"
+  : `${window.location.protocol}//${window.location.hostname}:3001`;
+
 function showMsg(elId, text, type) {
   const el = document.getElementById(elId);
   el.innerHTML = `<div class="msg ${type}">${text}</div>`;
@@ -15,7 +19,7 @@ async function apiRequest(method, path, body) {
   };
   if (body) opts.body = JSON.stringify(body);
   try {
-    const res = await fetch(path, opts);
+    const res = await fetch(`${API_BASE}${path}`, opts);
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, status: res.status, data };
   } catch (err) {
@@ -54,7 +58,7 @@ async function loadUsers() {
   listEl.innerHTML = data.map(u => `
     <div class="user-card" id="user-card-${u.id}">
       ${u.avatar
-        ? `<img class="user-avatar" src="${u.avatar}" onerror="this.style.display='none'" />`
+        ? `<img class="user-avatar" src="${API_BASE}${u.avatar}" onerror="this.style.display='none'" />`
         : `<div class="user-avatar"></div>`}
       <div class="user-info">
         <div class="user-name">${escHtml(u.username)}</div>
