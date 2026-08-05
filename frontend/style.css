@@ -291,6 +291,15 @@ button, input, label { font-family: inherit; }
   -webkit-box-orient: vertical;
   word-break: break-word;
 }
+.activity-exercise-type {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4f46e5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .empty-msg { grid-column: 1/-1; color: #888; font-size: 14px; }
 
 .activity-delete-btn {
@@ -362,6 +371,25 @@ button, input, label { font-family: inherit; }
   cursor: default;
 }
 .lightbox-note[hidden] { display: none; }
+.lightbox-exercise-type {
+  color: #a5b4fc;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  max-width: 480px;
+  cursor: default;
+  margin: 0;
+}
+.lightbox-exercise-type[hidden] { display: none; }
+.lightbox-timestamp {
+  color: #ccc;
+  font-size: 13px;
+  text-align: center;
+  max-width: 480px;
+  cursor: default;
+  margin: 0;
+}
+.lightbox-timestamp[hidden] { display: none; }
 
 /* ---------- Log activity modal ---------- */
 .modal-overlay {
@@ -392,7 +420,7 @@ button, input, label { font-family: inherit; }
 }
 .capture-btn:active { border-color: #4f46e5; color: #4f46e5; }
 .capture-preview { width: 100%; max-height: 200px; object-fit: cover; border-radius: 10px; margin-bottom: 12px; }
-#capture-note {
+#capture-exercise-type, #capture-note {
   width: 100%;
   padding: 12px 14px;
   border-radius: 10px;

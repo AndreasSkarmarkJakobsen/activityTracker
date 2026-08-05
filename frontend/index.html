@@ -105,6 +105,8 @@
 
   <div id="photo-lightbox" class="lightbox-overlay" hidden>
     <img id="lightbox-image" class="lightbox-image" alt="activity" />
+    <p id="lightbox-exercise-type" class="lightbox-exercise-type"></p>
+    <p id="lightbox-timestamp" class="lightbox-timestamp"></p>
     <p id="lightbox-note" class="lightbox-note"></p>
   </div>
 
@@ -120,6 +122,7 @@
         </label>
       </div>
       <img id="capture-preview" class="capture-preview" hidden />
+      <input type="text" id="capture-exercise-type" placeholder="What did you train? (e.g. Running, Gym, Yoga)" />
       <input type="text" id="capture-note" placeholder="Add a note (optional)" />
       <div class="modal-actions">
         <button id="capture-cancel" class="secondary">Cancel</button>
