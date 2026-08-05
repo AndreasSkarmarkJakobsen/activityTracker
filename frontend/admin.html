@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Activity Tracker Admin</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+  .container { max-width: 800px; margin: 0 auto; padding: 2rem 1rem; }
+  h1 { font-size: 1.6rem; margin-bottom: 1.5rem; color: #fff; }
+  h2 { font-size: 1.2rem; margin-bottom: 1rem; color: #ccc; }
+  .card { background: #16213e; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  input[type="password"], input[type="text"] {
+    width: 100%; padding: 0.7rem 1rem; border-radius: 8px; border: 1px solid #444;
+    background: #0f3460; color: #fff; font-size: 1rem; margin-bottom: 0.8rem;
+  }
+  button {
+    padding: 0.6rem 1.2rem; border-radius: 8px; border: none; cursor: pointer;
+    font-size: 0.9rem; font-weight: 600; transition: opacity 0.2s;
+  }
+  button:hover { opacity: 0.85; }
+  .btn-primary { background: #e94560; color: #fff; }
+  .btn-secondary { background: #0f3460; color: #fff; }
+  .btn-danger { background: #c0392b; color: #fff; }
+  .user-card {
+    background: #0f3460; border-radius: 10px; padding: 1rem 1.2rem;
+    display: flex; align-items: center; gap: 1rem; margin-bottom: 0.8rem;
+  }
+  .user-avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #444; }
+  .user-info { flex: 1; }
+  .user-name { font-weight: 700; font-size: 1rem; }
+  .user-id { font-size: 0.75rem; color: #aaa; }
+  .user-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .msg { padding: 0.6rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; }
+  .msg.success { background: #1e4620; color: #a3f5a7; }
+  .msg.error { background: #4a1a1a; color: #f5a3a3; }
+  #lock-section, #admin-section { }
+  #admin-section { display: none; }
+  .inline-pw { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+  .inline-pw input { margin-bottom: 0; flex: 1; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔐 Admin Panel</h1>
+
+  <div id="lock-section" class="card">
+    <h2>Enter Admin Token</h2>
+    <p style="font-size:0.85rem;color:#aaa;margin-bottom:0.8rem;">Paste the token from <code>docker compose logs</code></p>
+    <input type="password" id="token-input" placeholder="Admin token" />
+    <button class="btn-primary" onclick="unlock()">Unlock</button>
+    <div id="lock-msg"></div>
+  </div>
+
+  <div id="admin-section">
+    <div id="global-msg"></div>
+    <div class="card">
+      <h2>Users</h2>
+      <div id="user-list">Loading...</div>
+    </div>
+  </div>
+</div>
+<script src="admin.js"></script>
+</body>
+</html>

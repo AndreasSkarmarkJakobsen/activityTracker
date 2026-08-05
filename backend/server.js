@@ -1,17 +1,24 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const cors = require("cors");
 const exifr = require("exifr");
+const sharp = require("sharp");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const ADMIN_PORT = process.env.ADMIN_PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const JWT_EXPIRES_IN = "12h";
+
+// Generate a random admin token once at startup — rotates on every restart
+const ADMIN_TOKEN = crypto.randomBytes(32).toString("hex");
+console.log("ADMIN TOKEN:", ADMIN_TOKEN);
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -37,7 +44,7 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
   }
 });
-const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
 
 // Helper: delete an uploaded file from disk given its /uploads/<filename> path
 function deleteUploadedFile(imagePath) {
@@ -46,6 +53,44 @@ function deleteUploadedFile(imagePath) {
   fs.unlink(filePath, err => {
     if (err && err.code !== "ENOENT") console.error("Failed to delete file:", filePath, err);
   });
+}
+
+// Helper: compress image file in-place if it exceeds 5MB.
+// Returns the (possibly updated) file path.
+const COMPRESS_THRESHOLD = 5 * 1024 * 1024;
+async function compressIfNeeded(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size <= COMPRESS_THRESHOLD) return filePath;
+    const tmpPath = filePath + ".tmp.jpg";
+    await sharp(filePath)
+      .resize({ width: 1920, height: 1920, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toFile(tmpPath);
+    fs.renameSync(tmpPath, filePath);
+  } catch (err) {
+    console.error("Image compression failed, keeping original:", err);
+  }
+  return filePath;
+}
+
+// --- Admin token middleware ---
+function adminRequired(req, res, next) {
+  const token = req.headers["x-admin-token"];
+  if (!token || token !== ADMIN_TOKEN) return res.status(401).json({ error: "Unauthorized" });
+  next();
+}
+
+// Helper: delete a user and all their data from DB + disk
+async function deleteUserById(userId) {
+  const userResult = await pool.query("SELECT avatar FROM users WHERE id = $1", [userId]);
+  const user = userResult.rows[0];
+  if (!user) return false;
+  const activitiesResult = await pool.query("SELECT image_path FROM activities WHERE user_id = $1", [userId]);
+  await pool.query("DELETE FROM users WHERE id = $1", [userId]);
+  activitiesResult.rows.forEach(a => deleteUploadedFile(a.image_path));
+  if (user.avatar) deleteUploadedFile(user.avatar);
+  return true;
 }
 
 // --- Auth middleware ---
@@ -153,10 +198,9 @@ app.post("/api/activities", authRequired, upload.single("photo"), async (req, re
   const exerciseType = (req.body.exercise_type || "").trim();
   if (!exerciseType) return res.status(400).json({ error: "Exercise type is required" });
 
-  const imagePath = `/uploads/${req.file.filename}`;
   const note = req.body.note || null;
 
-  // Best-effort EXIF timestamp extraction
+  // Best-effort EXIF timestamp extraction (from original file, before compression)
   let exifTakenAt = null;
   try {
     const exifData = await exifr.parse(req.file.path, ["DateTimeOriginal", "CreateDate"]);
@@ -167,6 +211,10 @@ app.post("/api/activities", authRequired, upload.single("photo"), async (req, re
     // No EXIF data or parse error — continue without it
   }
 
+  // Compress large images (>5MB) in-place
+  await compressIfNeeded(req.file.path);
+
+  const imagePath = `/uploads/${req.file.filename}`;
   const result = await pool.query(
     "INSERT INTO activities (user_id, image_path, note, exercise_type, exif_taken_at) VALUES ($1,$2,$3,$4,$5) RETURNING *",
     [req.user.id, imagePath, note, exerciseType, exifTakenAt]
@@ -190,6 +238,10 @@ app.delete("/api/activities/:id", authRequired, async (req, res) => {
 // --- Update the logged-in user's own profile picture ---
 app.put("/api/users/me/avatar", authRequired, upload.single("avatar"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Avatar photo is required" });
+
+  // Compress large avatars (>5MB) in-place
+  await compressIfNeeded(req.file.path);
+
   const newAvatarPath = `/uploads/${req.file.filename}`;
 
   const existing = await pool.query("SELECT avatar FROM users WHERE id = $1", [req.user.id]);
@@ -207,20 +259,43 @@ app.put("/api/users/me/avatar", authRequired, upload.single("avatar"), async (re
 
 // --- Delete the logged-in user's own account (and all their activities + uploaded files) ---
 app.delete("/api/users/me", authRequired, async (req, res) => {
-  const userResult = await pool.query("SELECT avatar FROM users WHERE id = $1", [req.user.id]);
-  const user = userResult.rows[0];
-  if (!user) return res.status(404).json({ error: "User not found" });
-
-  const activitiesResult = await pool.query("SELECT image_path FROM activities WHERE user_id = $1", [req.user.id]);
-
-  // activities are removed automatically via ON DELETE CASCADE on the FK,
-  // but we still need to clean up the uploaded files from disk.
-  await pool.query("DELETE FROM users WHERE id = $1", [req.user.id]);
-
-  activitiesResult.rows.forEach(a => deleteUploadedFile(a.image_path));
-  if (user.avatar) deleteUploadedFile(user.avatar);
-
+  const deleted = await deleteUserById(req.user.id);
+  if (!deleted) return res.status(404).json({ error: "User not found" });
   res.json({ success: true });
+});
+
+// --- Admin API routes (protected by admin token) ---
+app.get("/api/admin/users", adminRequired, async (req, res) => {
+  const result = await pool.query("SELECT id, username, avatar, created_at FROM users ORDER BY username");
+  res.json(result.rows);
+});
+
+app.put("/api/admin/users/:id/password", adminRequired, async (req, res) => {
+  const { id } = req.params;
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ error: "Password is required" });
+  const hash = await bcrypt.hash(password, 10);
+  const result = await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, username", [hash, id]);
+  if (!result.rows.length) return res.status(404).json({ error: "User not found" });
+  res.json({ success: true, user: result.rows[0] });
+});
+
+app.delete("/api/admin/users/:id", adminRequired, async (req, res) => {
+  const { id } = req.params;
+  const deleted = await deleteUserById(parseInt(id, 10));
+  if (!deleted) return res.status(404).json({ error: "User not found" });
+  res.json({ success: true });
+});
+
+// Multer error handler — must be 4-argument Express error middleware
+app.use((err, req, res, next) => {
+  if (err && err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({ error: "File too large. Please use an image under 25MB." });
+  }
+  if (err && err.name === "MulterError") {
+    return res.status(400).json({ error: `Upload error: ${err.message}` });
+  }
+  next(err);
 });
 
 // Fallback to SPA
@@ -229,3 +304,13 @@ app.get("*", (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// --- Admin UI server on a separate port ---
+const adminApp = express();
+adminApp.use(cors());
+adminApp.use(express.json());
+adminApp.use(express.static(path.join(__dirname, "admin-public")));
+adminApp.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "admin-public", "admin.html"));
+});
+adminApp.listen(ADMIN_PORT, () => console.log(`Admin UI running on port ${ADMIN_PORT}`));
