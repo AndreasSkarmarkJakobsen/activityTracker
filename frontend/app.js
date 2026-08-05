@@ -36,11 +36,18 @@ function getAvatarUrl(user) {
 }
 
 /* ---------- Format a logged_at timestamp as "date, HH:MM" in 24h time ---------- */
-function formatActivityTimestamp(logged_at) {
+function formatActivityTimestamp(logged_at, exif_taken_at) {
   const d = new Date(logged_at);
   const dateStr = d.toLocaleDateString();
   const timeStr = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-  return `${dateStr}, ${timeStr}`;
+  let result = `${dateStr}, ${timeStr}`;
+  if (exif_taken_at) {
+    const ed = new Date(exif_taken_at);
+    const eDateStr = ed.toLocaleDateString();
+    const eTimeStr = ed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    result += ` (Photo taken: ${eDateStr}, ${eTimeStr})`;
+  }
+  return result;
 }
 
 document.getElementById("show-register").onclick = e => { e.preventDefault(); showView("register-view"); };
@@ -252,21 +259,24 @@ async function openUserDetail(userId, username, avatar) {
     acts.forEach(a => {
       const card = document.createElement("div");
       card.className = "activity-card";
-      const dateStr = formatActivityTimestamp(a.logged_at);
+      const dateStr = formatActivityTimestamp(a.logged_at, a.exif_taken_at);
       const deleteBtnHtml = isOwnProfile
         ? `<button class="activity-delete-btn" data-activity-id="${a.id}" aria-label="Delete activity" title="Delete activity">✕</button>`
+        : "";
+      const exerciseHtml = a.exercise_type
+        ? `<div class="activity-exercise-type">${a.exercise_type}</div>`
         : "";
       const noteHtml = a.note
         ? `<div class="activity-note">${a.note}</div>`
         : "";
-      card.innerHTML = `${deleteBtnHtml}<img src="${a.image_path}" alt="activity" class="activity-photo"><div class="activity-date">${dateStr}</div>${noteHtml}`;
+      card.innerHTML = `${deleteBtnHtml}<img src="${a.image_path}" alt="activity" class="activity-photo"><div class="activity-date">${dateStr}</div>${exerciseHtml}${noteHtml}`;
       list.appendChild(card);
 
       // Clicking the photo opens a lightbox showing the enlarged image
       // and its note underneath, closing again on an outside click.
       card.querySelector(".activity-photo").addEventListener("click", e => {
         e.stopPropagation();
-        openLightbox(a.image_path, a.note);
+        openLightbox(a.image_path, a.note, a.exercise_type, a.logged_at, a.exif_taken_at);
       });
     });
 
@@ -287,10 +297,24 @@ const lightbox = document.getElementById("photo-lightbox");
 const lightboxImage = document.getElementById("lightbox-image");
 const lightboxNote = document.getElementById("lightbox-note");
 
-function openLightbox(imageSrc, note) {
+function openLightbox(imageSrc, note, exerciseType, logged_at, exif_taken_at) {
   lightboxImage.src = imageSrc;
   lightboxNote.textContent = note || "";
   lightboxNote.hidden = !note;
+  // Show exercise type in lightbox
+  let exerciseEl = document.getElementById("lightbox-exercise-type");
+  if (exerciseEl) {
+    exerciseEl.textContent = exerciseType || "";
+    exerciseEl.hidden = !exerciseType;
+  }
+  // Show timestamp in lightbox
+  let tsEl = document.getElementById("lightbox-timestamp");
+  if (tsEl && logged_at) {
+    tsEl.textContent = formatActivityTimestamp(logged_at, exif_taken_at);
+    tsEl.hidden = false;
+  } else if (tsEl) {
+    tsEl.hidden = true;
+  }
   lightbox.hidden = false;
 }
 function closeLightbox() {
@@ -390,6 +414,7 @@ document.getElementById("log-activity-btn").onclick = () => {
   pendingFile = null;
   document.getElementById("capture-preview").hidden = true;
   document.getElementById("capture-note").value = "";
+  document.getElementById("capture-exercise-type").value = "";
   document.getElementById("capture-submit").disabled = true;
   modal.hidden = false;
 };
@@ -397,6 +422,12 @@ document.getElementById("capture-cancel").onclick = () => { modal.hidden = true;
 modal.addEventListener("click", e => {
   if (e.target === modal) modal.hidden = true;
 });
+
+function updateSubmitButton() {
+  const hasFile = !!pendingFile;
+  const hasExerciseType = document.getElementById("capture-exercise-type").value.trim().length > 0;
+  document.getElementById("capture-submit").disabled = !(hasFile && hasExerciseType);
+}
 
 function handleFileInput(e) {
   const file = e.target.files[0];
@@ -406,17 +437,21 @@ function handleFileInput(e) {
   reader.onload = ev => {
     const preview = document.getElementById("capture-preview");
     preview.src = ev.target.result; preview.hidden = false;
-    document.getElementById("capture-submit").disabled = false;
+    updateSubmitButton();
   };
   reader.readAsDataURL(file);
 }
 document.getElementById("capture-camera").onchange = handleFileInput;
 document.getElementById("capture-gallery").onchange = handleFileInput;
+document.getElementById("capture-exercise-type").addEventListener("input", updateSubmitButton);
 
 document.getElementById("capture-submit").onclick = async () => {
   if (!pendingFile) return;
+  const exerciseType = document.getElementById("capture-exercise-type").value.trim();
+  if (!exerciseType) return;
   const formData = new FormData();
   formData.append("photo", pendingFile);
+  formData.append("exercise_type", exerciseType);
   formData.append("note", document.getElementById("capture-note").value.trim());
 
   const res = await fetch(`${API}/activities`, {

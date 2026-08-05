@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS activities (
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   image_path TEXT NOT NULL,
   note TEXT,
+  exercise_type TEXT NOT NULL DEFAULT '',
+  exif_taken_at TIMESTAMP NULL,
   logged_at TIMESTAMP DEFAULT NOW()
 );
 

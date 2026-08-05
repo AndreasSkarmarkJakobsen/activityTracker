@@ -6,6 +6,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const cors = require("cors");
+const exifr = require("exifr");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,6 +14,12 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const JWT_EXPIRES_IN = "12h";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+// Run safe migrations to add new columns if they don't exist yet
+pool.query(`
+  ALTER TABLE activities ADD COLUMN IF NOT EXISTS exercise_type TEXT NOT NULL DEFAULT '';
+  ALTER TABLE activities ADD COLUMN IF NOT EXISTS exif_taken_at TIMESTAMP NULL;
+`).catch(err => console.error("Migration error:", err));
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
@@ -131,7 +138,7 @@ app.get("/api/leaderboard", authRequired, async (req, res) => {
 app.get("/api/users/:id/activities", authRequired, async (req, res) => {
   const { id } = req.params;
   const result = await pool.query(`
-    SELECT id, user_id, image_path, note, logged_at
+    SELECT id, user_id, image_path, note, exercise_type, exif_taken_at, logged_at
     FROM activities
     WHERE user_id = $1
       AND date_trunc('month', logged_at) = date_trunc('month', now())
@@ -143,12 +150,26 @@ app.get("/api/users/:id/activities", authRequired, async (req, res) => {
 // --- Log a new activity (photo upload) ---
 app.post("/api/activities", authRequired, upload.single("photo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Photo is required" });
+  const exerciseType = (req.body.exercise_type || "").trim();
+  if (!exerciseType) return res.status(400).json({ error: "Exercise type is required" });
+
   const imagePath = `/uploads/${req.file.filename}`;
   const note = req.body.note || null;
 
+  // Best-effort EXIF timestamp extraction
+  let exifTakenAt = null;
+  try {
+    const exifData = await exifr.parse(req.file.path, ["DateTimeOriginal", "CreateDate"]);
+    if (exifData) {
+      exifTakenAt = exifData.DateTimeOriginal || exifData.CreateDate || null;
+    }
+  } catch (e) {
+    // No EXIF data or parse error — continue without it
+  }
+
   const result = await pool.query(
-    "INSERT INTO activities (user_id, image_path, note) VALUES ($1,$2,$3) RETURNING *",
-    [req.user.id, imagePath, note]
+    "INSERT INTO activities (user_id, image_path, note, exercise_type, exif_taken_at) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+    [req.user.id, imagePath, note, exerciseType, exifTakenAt]
   );
   res.json(result.rows[0]);
 });
