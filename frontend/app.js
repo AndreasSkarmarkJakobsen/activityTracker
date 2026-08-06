@@ -164,7 +164,7 @@ async function renderLeaderboard() {
     const badgeHtml = `<span class="rank-number rank-${rankClass}">${rank}</span>`;
 
     let medalIcon = "";
-    if (isUniqueRank && rank === 1) medalIcon = "🔥";
+    if (isUniqueRank && rank === 1) medalIcon = "🏆";
     else if (isUniqueRank && rank === 2) medalIcon = "🥈";
     else if (isUniqueRank && rank === 3) medalIcon = "🥉";
     // Medal slot is always rendered (even when empty) so every row's
