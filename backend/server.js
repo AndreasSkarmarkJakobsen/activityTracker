@@ -110,6 +110,25 @@ function authRequired(req, res, next) {
   }
 }
 
+function makeSimpleRateLimiter(windowMs, maxRequests) {
+  const hits = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = `${req.ip}:${req.path}`;
+    const current = hits.get(key);
+    if (!current || current.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    if (current.count >= maxRequests) return res.status(429).json({ error: "Too many requests" });
+    current.count += 1;
+    next();
+  };
+}
+
+const publicServiceMessageRateLimit = makeSimpleRateLimiter(60 * 1000, 60);
+const adminServiceMessageRateLimit = makeSimpleRateLimiter(60 * 1000, 120);
+
 // --- Auth routes ---
 app.post("/api/register", upload.single("avatar"), async (req, res) => {
   try {
@@ -163,7 +182,7 @@ app.post("/api/refresh", authRequired, async (req, res) => {
 });
 
 // --- Public service message (shown on login + dashboard) ---
-app.get("/api/service-message", async (req, res) => {
+app.get("/api/service-message", publicServiceMessageRateLimit, async (req, res) => {
   try {
     const result = await pool.query("SELECT value FROM app_settings WHERE key = 'service_message'");
     const message = result.rows.length ? result.rows[0].value : null;
@@ -392,9 +411,9 @@ async function handleDeleteAdminServiceMessage(req, res) {
 app.get("/api/admin/users", adminRequired, noCache, handleGetAdminUsers);
 app.put("/api/admin/users/:id/password", adminRequired, noCache, handleSetAdminPassword);
 app.delete("/api/admin/users/:id", adminRequired, noCache, handleDeleteAdminUser);
-app.get("/api/admin/service-message", adminRequired, noCache, handleGetAdminServiceMessage);
-app.put("/api/admin/service-message", adminRequired, noCache, handleSetAdminServiceMessage);
-app.delete("/api/admin/service-message", adminRequired, noCache, handleDeleteAdminServiceMessage);
+app.get("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleGetAdminServiceMessage);
+app.put("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleSetAdminServiceMessage);
+app.delete("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleDeleteAdminServiceMessage);
 
 // Multer error handler — must be 4-argument Express error middleware
 app.use((err, req, res, next) => {
@@ -422,9 +441,9 @@ adminApp.use(express.json());
 adminApp.get("/api/admin/users", adminRequired, noCache, handleGetAdminUsers);
 adminApp.put("/api/admin/users/:id/password", adminRequired, noCache, handleSetAdminPassword);
 adminApp.delete("/api/admin/users/:id", adminRequired, noCache, handleDeleteAdminUser);
-adminApp.get("/api/admin/service-message", adminRequired, noCache, handleGetAdminServiceMessage);
-adminApp.put("/api/admin/service-message", adminRequired, noCache, handleSetAdminServiceMessage);
-adminApp.delete("/api/admin/service-message", adminRequired, noCache, handleDeleteAdminServiceMessage);
+adminApp.get("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleGetAdminServiceMessage);
+adminApp.put("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleSetAdminServiceMessage);
+adminApp.delete("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleDeleteAdminServiceMessage);
 // Serve uploaded files (avatars) so relative /uploads/... src attributes work on the admin UI
 adminApp.use("/uploads", express.static("/app/uploads"));
 adminApp.use(express.static(path.join(__dirname, "admin-public")));
