@@ -238,9 +238,27 @@ app.post("/api/activities", authRequired, upload.single("photo"), async (req, re
   // Best-effort EXIF timestamp extraction (from original file, before compression)
   let exifTakenAt = null;
   try {
-    const exifData = await exifr.parse(req.file.path, ["DateTimeOriginal", "CreateDate"]);
+    // Use translateValues:false so exifr returns the raw EXIF string
+    // (e.g. "2026:08:06 18:52:00") rather than a JS Date object. A JS Date
+    // would be internally UTC and node-postgres would serialize it in a way
+    // that could shift the wall-clock time when stored in a TIMESTAMP (no
+    // timezone) column.
+    const exifData = await exifr.parse(req.file.path, { pick: ["DateTimeOriginal", "CreateDate"], translateValues: false });
     if (exifData) {
-      exifTakenAt = exifData.DateTimeOriginal || exifData.CreateDate || null;
+      const rawTs = exifData.DateTimeOriginal || exifData.CreateDate || null;
+      if (rawTs) {
+        // EXIF datetime format is "YYYY:MM:DD HH:MM:SS" — convert colons in
+        // the date part to dashes so Postgres accepts it as a plain timestamp
+        // string with no timezone adjustment applied.
+        if (typeof rawTs === "string") {
+          exifTakenAt = rawTs.replace(/^(\d{4}):(\d{2}):(\d{2})/, "$1-$2-$3");
+        } else if (rawTs instanceof Date) {
+          // Fallback: format the Date's numeric components as a local-time
+          // string to avoid UTC serialization by node-postgres.
+          const pad = n => String(n).padStart(2, "0");
+          exifTakenAt = `${rawTs.getFullYear()}-${pad(rawTs.getMonth() + 1)}-${pad(rawTs.getDate())} ${pad(rawTs.getHours())}:${pad(rawTs.getMinutes())}:${pad(rawTs.getSeconds())}`;
+        }
+      }
     }
   } catch (e) {
     // No EXIF data or parse error — continue without it

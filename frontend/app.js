@@ -1,4 +1,5 @@
 const API = "/api";
+const MONTHLY_GOAL = 12;
 let token = localStorage.getItem("token");
 let currentUser = JSON.parse(localStorage.getItem("currentUser") || "null");
 
@@ -64,9 +65,20 @@ function formatActivityTimestamp(logged_at, exif_taken_at) {
   const timeStr = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
   let result = `${dateStr}, ${timeStr}`;
   if (exif_taken_at) {
-    const ed = new Date(exif_taken_at);
-    const eDateStr = ed.toLocaleDateString();
-    const eTimeStr = ed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    // Parse the stored "YYYY-MM-DD HH:MM:SS" string by splitting its
+    // components directly so that no timezone conversion is applied — the
+    // wall-clock values embedded in the EXIF data are displayed as-is.
+    const parts = String(exif_taken_at).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    let eDateStr, eTimeStr;
+    if (parts) {
+      const ed = new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]), Number(parts[4]), Number(parts[5]), Number(parts[6]));
+      eDateStr = ed.toLocaleDateString();
+      eTimeStr = ed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    } else {
+      const ed = new Date(exif_taken_at);
+      eDateStr = ed.toLocaleDateString();
+      eTimeStr = ed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    }
     result += ` (Photo taken: ${eDateStr}, ${eTimeStr})`;
   }
   return result;
@@ -154,7 +166,6 @@ async function renderLeaderboard() {
     .sort((a, b) => b.activity_count - a.activity_count);
 
   const totalWorkouts = sorted.reduce((sum, u) => sum + u.activity_count, 0);
-  const maxCount = sorted.length ? sorted[0].activity_count : 0;
 
   // Stat cards: current user's rank + total workouts across everyone.
   const myIndex = sorted.findIndex(u => currentUser && Number(u.id) === Number(currentUser.id));
@@ -168,37 +179,33 @@ async function renderLeaderboard() {
 
   // Standard competition ranking (1224 style): a user's rank is
   // 1 + the number of people with a strictly higher count. Users with the
-  // same count share the same rank. A medal is only ever awarded when the
-  // rank is 1, 2, or 3 AND exactly one person occupies that rank (no tie)
-  // AND their count is greater than 0 - so if everyone (or the top group)
-  // is tied, nobody gets a medal.
+  // same count share the same rank. Medals are awarded to ranks 1, 2, and 3
+  // for any user with activity_count > 0, regardless of ties.
   const ranks = sorted.map(u => {
     const higher = sorted.filter(other => other.activity_count > u.activity_count).length;
     return higher + 1;
   });
-  const rankGroupSize = rank => ranks.filter(r => r === rank).length;
 
   sorted.forEach((u, i) => {
     const rank = ranks[i];
     const isMe = currentUser && Number(u.id) === Number(currentUser.id);
-    const isUniqueRank = rankGroupSize(rank) === 1 && u.activity_count > 0;
+    const hasMedal = u.activity_count > 0;
 
     const rankClass = rank <= 3 ? rank : "other";
     const badgeHtml = `<span class="rank-number rank-${rankClass}">${rank}</span>`;
 
     let medalIcon = "";
-    if (isUniqueRank && rank === 1) medalIcon = "🏆";
-    else if (isUniqueRank && rank === 2) medalIcon = "🥈";
-    else if (isUniqueRank && rank === 3) medalIcon = "🥉";
+    if (hasMedal && rank === 1) medalIcon = "🏆";
+    else if (hasMedal && rank === 2) medalIcon = "🥈";
+    else if (hasMedal && rank === 3) medalIcon = "🥉";
     // Medal slot is always rendered (even when empty) so every row's
     // name/bar column keeps the exact same width regardless of whether
     // a medal icon is shown - this keeps the progress bars comparable.
     const medalHtml = `<span class="rank-medal">${medalIcon}</span>`;
 
-    // Bar width is relative to the top score, with a small minimum so a
-    // count of 0 is still visible as an (almost) empty bar rather than
-    // looking identical to a bar with a real, larger, hidden minimum.
-    const pct = maxCount > 0 ? Math.max(2, Math.round((u.activity_count / maxCount) * 100)) : 0;
+    // Bar width scales against the fixed monthly goal so a full bar means
+    // the user has hit their goal, independent of what others have done.
+    const pct = Math.min(100, Math.max(u.activity_count > 0 ? 2 : 0, Math.round((u.activity_count / MONTHLY_GOAL) * 100)));
     const unit = u.activity_count === 1 ? "workout" : "workouts";
 
     const row = document.createElement("div");
@@ -261,13 +268,12 @@ async function openUserDetail(userId, username, avatar) {
     return;
   }
   const acts = await res.json();
-  const goal = 12;
   const isOwnProfile = !!(currentUser && Number(userId) === Number(currentUser.id));
 
   document.getElementById("detail-username").textContent = username;
   document.getElementById("detail-avatar").src = getAvatarUrl({ username, avatar });
-  document.getElementById("detail-progress").textContent = `${acts.length} / ${goal} activities logged this month`;
-  document.getElementById("detail-progress-fill").style.width = `${Math.min(100, (acts.length / goal) * 100)}%`;
+  document.getElementById("detail-progress").textContent = `${acts.length} / ${MONTHLY_GOAL} activities logged this month`;
+  document.getElementById("detail-progress-fill").style.width = `${Math.min(100, (acts.length / MONTHLY_GOAL) * 100)}%`;
 
   // Show/hide the "change avatar" control and "account settings" section
   // depending on whether this is the logged-in user's own profile.
