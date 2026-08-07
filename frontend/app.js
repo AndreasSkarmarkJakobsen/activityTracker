@@ -144,6 +144,7 @@ async function enterDashboard() {
   await loadServiceMessage();
   await renderLeaderboard();
   await renderCarousel();
+  await loadLastWeekWinner();
 }
 
 async function fetchLeaderboard() {
@@ -177,14 +178,12 @@ async function renderLeaderboard() {
   const list = document.getElementById("leaderboard-list");
   list.innerHTML = "";
 
-  // Standard competition ranking (1224 style): a user's rank is
-  // 1 + the number of people with a strictly higher count. Users with the
-  // same count share the same rank. Medals are awarded to ranks 1, 2, and 3
-  // for any user with activity_count > 0, regardless of ties.
-  const ranks = sorted.map(u => {
-    const higher = sorted.filter(other => other.activity_count > u.activity_count).length;
-    return higher + 1;
-  });
+  // Dense ranking: a user's rank is the position of their score among the
+  // distinct sorted scores (descending). Ties share the same rank and the
+  // next distinct score gets the immediately following rank (no gaps).
+  // Medals are awarded to ranks 1, 2, and 3 for any user with activity_count > 0.
+  const distinctScoresDesc = [...new Set(sorted.map(u => u.activity_count))].sort((a, b) => b - a);
+  const ranks = sorted.map(u => distinctScoresDesc.indexOf(u.activity_count) + 1);
 
   sorted.forEach((u, i) => {
     const rank = ranks[i];
@@ -245,6 +244,39 @@ async function renderCarousel() {
     item.onclick = () => openUserDetail(u.id, u.username, u.avatar);
     carousel.appendChild(item);
   });
+}
+
+async function loadLastWeekWinner() {
+  const card = document.getElementById("last-week-winner-card");
+  const res = await fetch(`${API}/last-week-winner`, { headers: authHeaders() });
+  if (res.status === 401) {
+    clearSession();
+    showView("login-view");
+    return;
+  }
+  const data = await res.json();
+  if (!data.winners || data.winners.length === 0) {
+    card.hidden = true;
+    return;
+  }
+  const avatarsEl = document.getElementById("lww-avatars");
+  const nameEl = document.getElementById("lww-name");
+  const scoreEl = document.getElementById("lww-score");
+  const labelEl = document.getElementById("lww-label");
+  avatarsEl.innerHTML = data.winners.map(w => `<img src="${getAvatarUrl(w)}" alt="${w.username}">`).join("");
+  const unit = data.score === 1 ? "workout" : "workouts";
+  if (data.winners.length === 1) {
+    labelEl.textContent = "Last week's winner";
+    nameEl.textContent = `🏆 ${data.winners[0].username}`;
+    scoreEl.textContent = `${data.score} ${unit}`;
+  } else {
+    labelEl.textContent = "Last week was a tie!";
+    const names = data.winners.map(w => w.username);
+    const nameStr = names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+    nameEl.textContent = nameStr;
+    scoreEl.textContent = `Both with ${data.score} ${unit}`;
+  }
+  card.hidden = false;
 }
 
 document.getElementById("carousel-left").onclick = () =>
