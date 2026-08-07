@@ -98,7 +98,7 @@ button, input, label { font-family: inherit; }
 
 .stat-cards-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -113,6 +113,10 @@ button, input, label { font-family: inherit; }
 .stat-card-label { font-size: 12px; color: #777; margin-bottom: 6px; }
 .stat-card-value { font-size: 26px; font-weight: 700; color: #1a1a1a; }
 .stat-card-sub { font-size: 11px; color: #999; margin-top: 4px; }
+
+.last-week-winner-card { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.lww-avatars { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; margin-bottom: 4px; }
+.lww-avatars img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #e0c040; }
 
 .leaderboard-card {
   background: #fff;
@@ -517,7 +521,7 @@ button, input, label { font-family: inherit; }
 /* ---------- Desktop enhancements (min-width up) ---------- */
 @media (min-width: 640px) {
   .dashboard-main { padding: 24px; }
-  .stat-cards-row { grid-template-columns: 1fr 1fr; max-width: 480px; }
+  .stat-cards-row { grid-template-columns: 1fr 1fr 1fr; max-width: 720px; }
   .fab-log-btn { width: auto; padding: 14px 28px; }
   .carousel-item { width: 84px; }
   .carousel-item img { width: 72px; height: 72px; }

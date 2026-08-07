@@ -288,6 +288,34 @@ app.delete("/api/activities/:id", authRequired, async (req, res) => {
   res.json({ success: true });
 });
 
+// --- Last week's winner ---
+app.get("/api/last-week-winner", authRequired, async (req, res) => {
+  const result = await pool.query(`
+    SELECT u.id, u.username, u.avatar, COUNT(a.id) AS activity_count
+    FROM users u
+    JOIN activities a ON a.user_id = u.id
+    WHERE a.logged_at >= date_trunc('week', now()) - INTERVAL '7 days'
+      AND a.logged_at <  date_trunc('week', now())
+    GROUP BY u.id
+    HAVING COUNT(a.id) > 0
+    ORDER BY activity_count DESC
+  `);
+  const rows = result.rows.map(r => ({ ...r, activity_count: Number(r.activity_count) }));
+  if (rows.length === 0) {
+    return res.json({ winners: [], score: 0 });
+  }
+  const maxCount = rows[0].activity_count;
+  const winners = rows.filter(r => r.activity_count === maxCount);
+  const weekStart = await pool.query(`SELECT (date_trunc('week', now()) - INTERVAL '7 days') AS ws`);
+  const weekEnd = await pool.query(`SELECT (date_trunc('week', now()) - INTERVAL '1 second') AS we`);
+  res.json({
+    week_start: weekStart.rows[0].ws,
+    week_end: weekEnd.rows[0].we,
+    winners,
+    score: maxCount
+  });
+});
+
 // --- Update the logged-in user's own profile picture ---
 app.put("/api/users/me/avatar", authRequired, upload.single("avatar"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Avatar photo is required" });
