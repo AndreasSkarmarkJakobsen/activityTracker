@@ -16,5 +16,10 @@ CREATE TABLE IF NOT EXISTS activities (
   logged_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+
 -- Register users through the app UI to create accounts with properly
 -- hashed passwords. No demo users are seeded by default.

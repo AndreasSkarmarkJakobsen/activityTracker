@@ -14,6 +14,28 @@ function clearSession() {
   localStorage.removeItem("currentUser");
 }
 
+async function loadServiceMessage() {
+  const banners = document.querySelectorAll(".service-message-banner");
+  try {
+    const res = await fetch(`${API}/service-message`, { cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
+    const message = typeof data.message === "string" ? data.message.trim() : "";
+    if (res.ok && message) {
+      banners.forEach(el => {
+        el.textContent = message;
+        el.hidden = false;
+      });
+      return;
+    }
+  } catch {
+    // Ignore network errors for this optional banner.
+  }
+  banners.forEach(el => {
+    el.textContent = "";
+    el.hidden = true;
+  });
+}
+
 /* ---------- Initials fallback avatar (deterministic color + first 2 letters) ---------- */
 function hashStringToHue(str) {
   let hash = 0;
@@ -107,6 +129,7 @@ document.getElementById("logout-btn").onclick = () => {
 async function enterDashboard() {
   document.getElementById("welcome-msg").textContent = `Hi, ${currentUser.username}!`;
   showView("dashboard-view");
+  await loadServiceMessage();
   await renderLeaderboard();
   await renderCarousel();
 }
@@ -565,6 +588,7 @@ async function refreshSession() {
 
 /* ---------- Init: always start on login unless a valid session exists ---------- */
 showView("login-view");
+loadServiceMessage();
 if (token && currentUser) {
   refreshSession().then(ok => {
     if (ok) enterDashboard();

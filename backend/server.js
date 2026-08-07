@@ -26,6 +26,10 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 pool.query(`
   ALTER TABLE activities ADD COLUMN IF NOT EXISTS exercise_type TEXT NOT NULL DEFAULT '';
   ALTER TABLE activities ADD COLUMN IF NOT EXISTS exif_taken_at TIMESTAMP NULL;
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
 `).catch(err => console.error("Migration error:", err));
 
 app.use(cors());
@@ -106,6 +110,25 @@ function authRequired(req, res, next) {
   }
 }
 
+function makeSimpleRateLimiter(windowMs, maxRequests) {
+  const hits = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = `${req.ip}:${req.path}`;
+    const current = hits.get(key);
+    if (!current || current.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    if (current.count >= maxRequests) return res.status(429).json({ error: "Too many requests" });
+    current.count += 1;
+    next();
+  };
+}
+
+const publicServiceMessageRateLimit = makeSimpleRateLimiter(60 * 1000, 60);
+const adminServiceMessageRateLimit = makeSimpleRateLimiter(60 * 1000, 120);
+
 // --- Auth routes ---
 app.post("/api/register", upload.single("avatar"), async (req, res) => {
   try {
@@ -156,6 +179,18 @@ app.post("/api/refresh", authRequired, async (req, res) => {
   if (!user) return res.status(404).json({ error: "User not found" });
   const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
   res.json({ token, user });
+});
+
+// --- Public service message (shown on login + dashboard) ---
+app.get("/api/service-message", publicServiceMessageRateLimit, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT value FROM app_settings WHERE key = 'service_message'");
+    const message = result.rows.length ? result.rows[0].value : null;
+    res.json({ message: message && String(message).trim() ? message : null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 // --- Users list ---
@@ -331,10 +366,54 @@ async function handleDeleteAdminUser(req, res) {
   res.json({ success: true });
 }
 
+async function handleGetAdminServiceMessage(req, res) {
+  try {
+    const result = await pool.query("SELECT value FROM app_settings WHERE key = 'service_message'");
+    const message = result.rows.length ? result.rows[0].value : null;
+    res.json({ message: message && String(message).trim() ? message : null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+}
+
+async function handleSetAdminServiceMessage(req, res) {
+  try {
+    const message = (req.body.message || "").trim();
+    if (!message) {
+      await pool.query("DELETE FROM app_settings WHERE key = 'service_message'");
+      return res.json({ success: true, message: null });
+    }
+    await pool.query(
+      `INSERT INTO app_settings (key, value)
+       VALUES ('service_message', $1)
+       ON CONFLICT (key) DO UPDATE SET value = $1`,
+      [message]
+    );
+    res.json({ success: true, message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+}
+
+async function handleDeleteAdminServiceMessage(req, res) {
+  try {
+    await pool.query("DELETE FROM app_settings WHERE key = 'service_message'");
+    res.json({ success: true, message: null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+}
+
 // --- Admin API routes (protected by admin token) ---
 app.get("/api/admin/users", adminRequired, noCache, handleGetAdminUsers);
 app.put("/api/admin/users/:id/password", adminRequired, noCache, handleSetAdminPassword);
 app.delete("/api/admin/users/:id", adminRequired, noCache, handleDeleteAdminUser);
+app.get("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleGetAdminServiceMessage);
+app.put("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleSetAdminServiceMessage);
+app.delete("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleDeleteAdminServiceMessage);
 
 // Multer error handler — must be 4-argument Express error middleware
 app.use((err, req, res, next) => {
@@ -362,6 +441,9 @@ adminApp.use(express.json());
 adminApp.get("/api/admin/users", adminRequired, noCache, handleGetAdminUsers);
 adminApp.put("/api/admin/users/:id/password", adminRequired, noCache, handleSetAdminPassword);
 adminApp.delete("/api/admin/users/:id", adminRequired, noCache, handleDeleteAdminUser);
+adminApp.get("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleGetAdminServiceMessage);
+adminApp.put("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleSetAdminServiceMessage);
+adminApp.delete("/api/admin/service-message", adminRequired, noCache, adminServiceMessageRateLimit, handleDeleteAdminServiceMessage);
 // Serve uploaded files (avatars) so relative /uploads/... src attributes work on the admin UI
 adminApp.use("/uploads", express.static("/app/uploads"));
 adminApp.use(express.static(path.join(__dirname, "admin-public")));
