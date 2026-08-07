@@ -42,12 +42,45 @@ async function unlock() {
     // even though the DOM/content is populated correctly.
     document.getElementById("admin-section").style.display = "block";
     loadUsers();
+    loadServiceMessage();
   } else {
     adminToken = null;
     const msg = data.error && data.error.startsWith("Could not reach")
       ? data.error
       : "Invalid token. Check docker compose logs.";
     showMsg("lock-msg", msg, "error");
+  }
+}
+
+async function loadServiceMessage() {
+  const input = document.getElementById("service-message-input");
+  const { ok, data } = await apiRequest("GET", "/api/admin/service-message");
+  if (!ok) {
+    input.value = "";
+    showMsg("service-message-msg", data.error || "Failed to load service message.", "error");
+    return;
+  }
+  input.value = data.message || "";
+}
+
+async function saveServiceMessage() {
+  const message = document.getElementById("service-message-input").value;
+  const { ok, data } = await apiRequest("PUT", "/api/admin/service-message", { message });
+  if (ok) {
+    document.getElementById("service-message-input").value = data.message || "";
+    showMsg("service-message-msg", data.message ? "Service message saved." : "Service message cleared.", "success");
+  } else {
+    showMsg("service-message-msg", data.error || "Failed to save service message.", "error");
+  }
+}
+
+async function clearServiceMessage() {
+  const { ok, data } = await apiRequest("DELETE", "/api/admin/service-message");
+  if (ok) {
+    document.getElementById("service-message-input").value = "";
+    showMsg("service-message-msg", "Service message cleared.", "success");
+  } else {
+    showMsg("service-message-msg", data.error || "Failed to clear service message.", "error");
   }
 }
 

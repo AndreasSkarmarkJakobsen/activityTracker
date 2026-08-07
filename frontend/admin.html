@@ -15,6 +15,18 @@
     width: 100%; padding: 0.7rem 1rem; border-radius: 8px; border: 1px solid #444;
     background: #0f3460; color: #fff; font-size: 1rem; margin-bottom: 0.8rem;
   }
+  textarea {
+    width: 100%;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: #0f3460;
+    color: #fff;
+    font-size: 1rem;
+    margin-bottom: 0.8rem;
+    resize: vertical;
+    min-height: 90px;
+  }
   button {
     padding: 0.6rem 1.2rem; border-radius: 8px; border: none; cursor: pointer;
     font-size: 0.9rem; font-weight: 600; transition: opacity 0.2s;
@@ -39,6 +51,7 @@
   #admin-section { display: none; }
   .inline-pw { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
   .inline-pw input { margin-bottom: 0; flex: 1; }
+  .service-msg-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -55,6 +68,15 @@
 
   <div id="admin-section">
     <div id="global-msg"></div>
+    <div class="card">
+      <h2>Service Message</h2>
+      <textarea id="service-message-input" placeholder="Enter service/maintenance message shown on login and dashboard"></textarea>
+      <div class="service-msg-actions">
+        <button class="btn-primary" onclick="saveServiceMessage()">Save</button>
+        <button class="btn-secondary" onclick="clearServiceMessage()">Clear</button>
+      </div>
+      <div id="service-message-msg"></div>
+    </div>
     <div class="card">
       <h2>Users</h2>
       <div id="user-list">Loading...</div>
